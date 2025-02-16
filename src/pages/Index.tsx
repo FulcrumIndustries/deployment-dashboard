@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { DeploymentCard } from "@/components/DeploymentCard";
@@ -116,27 +115,12 @@ const Index = () => {
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {deployments.map((deployment) => (
-          <div key={deployment.id} className="group relative">
-            <DeploymentCard deployment={deployment} />
-            <div className="absolute bottom-4 right-4 z-10 flex space-x-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => openEditSheet(deployment)}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => handleDelete(deployment.id)}
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
+          <DeploymentCard
+            key={deployment.id}
+            deployment={deployment}
+            onEdit={() => openEditSheet(deployment)}
+            onDelete={() => handleDelete(deployment.id)}
+          />
         ))}
       </div>
     </div>

@@ -1,6 +1,7 @@
 
 import { Calendar, Terminal, Server, Shield, Bug, Bell, History, Wrench } from "lucide-react";
 import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
 import type { Deployment } from "@/types/deployment";
 
 const categoryIcons = {
@@ -27,13 +28,15 @@ const categoryColors = {
 
 interface DeploymentCardProps {
   deployment: Deployment;
+  onEdit: () => void;
+  onDelete: () => void;
 }
 
-export function DeploymentCard({ deployment }: DeploymentCardProps) {
+export function DeploymentCard({ deployment, onEdit, onDelete }: DeploymentCardProps) {
   const Icon = categoryIcons[deployment.category];
 
   return (
-    <div className="deployment-card animate-fade-up">
+    <div className="deployment-card animate-fade-up group">
       <div className="flex items-start justify-between">
         <span className={`category-chip ${categoryColors[deployment.category]}`}>
           <Icon className="mr-1 h-3 w-3" />
@@ -58,6 +61,22 @@ export function DeploymentCard({ deployment }: DeploymentCardProps) {
           ))}
         </div>
       )}
+      <div className="mt-4 flex justify-end space-x-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onEdit}
+        >
+          Edit
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={onDelete}
+        >
+          Delete
+        </Button>
+      </div>
     </div>
   );
 }
