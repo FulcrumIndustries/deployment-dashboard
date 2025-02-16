@@ -117,7 +117,8 @@ const Index = () => {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {deployments.map((deployment) => (
           <div key={deployment.id} className="group relative">
-            <div className="absolute right-4 top-4 z-10 flex space-x-2">
+            <DeploymentCard deployment={deployment} />
+            <div className="absolute bottom-4 right-4 z-10 flex space-x-2">
               <Button
                 variant="secondary"
                 size="sm"
@@ -135,7 +136,6 @@ const Index = () => {
                 Delete
               </Button>
             </div>
-            <DeploymentCard deployment={deployment} />
           </div>
         ))}
       </div>

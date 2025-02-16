@@ -34,15 +34,17 @@ export function DeploymentCard({ deployment }: DeploymentCardProps) {
 
   return (
     <div className="deployment-card animate-fade-up">
-      <span className={`category-chip ${categoryColors[deployment.category]}`}>
-        <Icon className="mr-1 h-3 w-3" />
-        {deployment.category}
-      </span>
+      <div className="flex items-start justify-between">
+        <span className={`category-chip ${categoryColors[deployment.category]}`}>
+          <Icon className="mr-1 h-3 w-3" />
+          {deployment.category}
+        </span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {format(deployment.date, "MMM d, yyyy")}
+        </span>
+      </div>
       <h3 className="card-title mt-2">{deployment.title}</h3>
       <p className="card-description mt-2">{deployment.description}</p>
-      <span className="date-badge">
-        {format(deployment.date, "MMM d, yyyy")}
-      </span>
       {deployment.scripts && deployment.scripts.length > 0 && (
         <div className="mt-4 space-y-2">
           {deployment.scripts.map((script, index) => (
