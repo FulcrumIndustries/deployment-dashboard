@@ -14,11 +14,17 @@ export interface DeploymentScript {
   command: string;
 }
 
+export interface DeploymentSection {
+  prerequisites: DeploymentScript[];
+  execution: DeploymentScript[];
+  postDeployment: DeploymentScript[];
+}
+
 export interface Deployment {
   id: string;
   title: string;
   description: string;
   date: Date;
   category: DeploymentCategory;
-  scripts?: DeploymentScript[];
+  sections: DeploymentSection;
 }
