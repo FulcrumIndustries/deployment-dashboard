@@ -1,69 +1,146 @@
-# Welcome to your Lovable project
+# Aionyx EasyDeploy 🚀
 
-## Project info
+A modern, intuitive deployment management tool that helps you track and organize your deployment steps with style.
 
-**URL**: https://lovable.dev/projects/f897c5ce-42a8-476e-a723-5c3ae7a12225
+![Aionyx EasyDeploy Screenshot](screenshot.png)
 
-## How can I edit this code?
+## ✨ Features
 
-There are several ways of editing your application.
+- **Visual Deployment Tracking**: Beautiful, animated interface with dynamic sine waves
+- **Step-by-Step Management**: Organize your deployment steps with a clear, structured approach
+- **Real-time Status**: Track completion status of each deployment step
+- **Type Categories**: Categorize steps with color-coded types (Database, API, Scripting, etc.)
+- **Persistent Storage**: All your deployments are saved locally using IndexedDB
+- **Shareable Deployments**: Easy copy-paste deployment IDs for sharing with your team
 
-**Use Lovable**
+## 🚀 Quick Start
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/f897c5ce-42a8-476e-a723-5c3ae7a12225) and start prompting.
+1. Clone the repository:
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+git clone https://github.com/yourusername/aionyx-easydeploy.git
+cd aionyx-easydeploy
 ```
 
-**Edit a file directly in GitHub**
+2. Install dependencies:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```bash
+npm install
+# or
+yarn install
+```
 
-**Use GitHub Codespaces**
+3. Start the development server:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+npm run dev
+# or
+yarn dev
+```
 
-## What technologies are used for this project?
+4. Open [http://localhost:5173](http://localhost:5173) in your browser
 
-This project is built with .
+## 📖 How to Use
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Creating a New Deployment
 
-## How can I deploy this project?
+1. Click "Create New Deployment" on the dashboard
+2. Fill in the deployment details:
+   - Title
+   - Description
+   - Category
+   - Date
+3. Add steps using the "+" button at the bottom
+4. For each step, specify:
+   - Type (Database, API, Files, etc.)
+   - Name
+   - Action details
+   - Optional comments
 
-Simply open [Lovable](https://lovable.dev/projects/f897c5ce-42a8-476e-a723-5c3ae7a12225) and click on Share -> Publish.
+### Managing Steps
 
-## I want to use a custom domain - is that possible?
+- **Add Steps**: Click the "+" button below the table
+- **Mark Complete**: Check the checkbox next to any step
+- **Edit Steps**: Click any field to edit directly
+- **Delete Steps**: Click the trash icon on the right
+- **Reorder**: Steps are automatically numbered in sequence
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+### Sharing Deployments
+
+1. Copy the Deployment ID (click the copy icon)
+2. Share the ID with your team
+3. They can load it using the "Load Existing" section
+4. All changes are synchronized locally
+
+## 🎨 Types of Steps
+
+- 🗄️ **Database**: Database migrations and updates
+- 📜 **Scripting**: Run scripts or commands
+- 🔌 **API**: API deployments and updates
+- 📁 **Files**: File system operations
+- 📧 **Mail**: Email service configurations
+- 💾 **Backup**: Backup procedures
+- 📊 **Monitor**: Monitoring setup
+- ⚙️ **Configure**: Configuration changes
+- 📋 **Prerequisite**: Required preliminary steps
+- ↩️ **Rollback**: Rollback procedures
+
+## 🛠️ Development
+
+### Tech Stack
+
+- React 18 + TypeScript
+- Material-UI (MUI) for components
+- Dexie.js for IndexedDB management
+- Canvas API for wave animations
+- React Router for navigation
+- UUID for unique identifiers
+
+### Building for Production
+
+1. Create a production build:
+
+```bash
+npm run build
+# or
+yarn build
+```
+
+2. The build output will be in the `dist` directory
+
+### Deployment
+
+You can deploy the contents of the `dist` directory to any static hosting service:
+
+```bash
+# Using Vercel
+vercel deploy
+
+# Using Netlify
+netlify deploy
+
+# Using GitHub Pages
+gh-pages -d dist
+```
+
+## 📝 License
+
+MIT License - feel free to use and modify!
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 💖 Support
+
+If you find this project helpful, please give it a star ⭐️
+
+## 🔗 Links
+
+- [Report a bug](https://github.com/FulcrumIndustries/deployment-dashboard/issues)
+- [Request a feature](https://github.com/FulcrumIndustries/deployment-dashboard/issues)
+- [Documentation](https://github.com/FulcrumIndustries/deployment-dashboard/wiki)
