@@ -2,7 +2,7 @@
 
 A modern, intuitive deployment management tool that helps you track and organize your deployment steps with style.
 
-![Aionyx EasyDeploy Screenshot](screenshot.png)
+![Aionyx EasyDeploy Screenshot](public/og-image.png)
 
 ## ✨ Features
 
