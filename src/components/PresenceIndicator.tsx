@@ -1,40 +1,46 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../lib/db-setup";
-import { Chip, Avatar } from '@mui/material';
-import { v4 as uuidv4 } from 'uuid';
+import { db } from "../../shared/lib/db-setup";
+import { Chip, Avatar } from "@mui/material";
+import { v4 as uuidv4 } from "uuid";
 
-export default function PresenceIndicator({ deploymentId }: { deploymentId?: string }) {
+export default function PresenceIndicator({
+  deploymentId,
+}: {
+  deploymentId?: string;
+}) {
   const [ws, setWs] = useState<WebSocket | null>(null);
-  const [userId] = useState(() => localStorage.getItem('userId') || uuidv4());
+  const [userId] = useState(() => localStorage.getItem("userId") || uuidv4());
 
   useEffect(() => {
-    localStorage.setItem('userId', userId);
+    localStorage.setItem("userId", userId);
   }, [userId]);
 
   useEffect(() => {
     if (!deploymentId) return;
-    
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     const newWs = new WebSocket(wsUrl);
 
     newWs.onopen = () => {
-      newWs.send(JSON.stringify({ 
-        type: 'PRESENCE_UPDATE', 
-        deploymentId,
-        userId,
-        userName: "User " + Math.floor(Math.random() * 1000) // Replace with real username
-      }));
+      newWs.send(
+        JSON.stringify({
+          type: "PRESENCE_UPDATE",
+          deploymentId,
+          userId,
+          userName: "User " + Math.floor(Math.random() * 1000), // Replace with real username
+        })
+      );
     };
 
     newWs.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error("WebSocket error:", error);
     };
 
     newWs.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      if (msg.type === 'PRESENCE') {
+      if (msg.type === "PRESENCE") {
         db.collaborators.bulkPut(msg.collaborators);
       }
     };
@@ -55,9 +61,9 @@ export default function PresenceIndicator({ deploymentId }: { deploymentId?: str
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (ws?.readyState === WebSocket.OPEN) {
         ws.close();
       }
@@ -67,7 +73,7 @@ export default function PresenceIndicator({ deploymentId }: { deploymentId?: str
   const collaborators = useLiveQuery(async () => {
     if (!deploymentId) return [];
     return db.collaborators
-      .where('deploymentId')
+      .where("deploymentId")
       .equals(deploymentId)
       .toArray();
   }, [deploymentId]);
@@ -86,4 +92,4 @@ export default function PresenceIndicator({ deploymentId }: { deploymentId?: str
       ))}
     </div>
   );
-} 
+}

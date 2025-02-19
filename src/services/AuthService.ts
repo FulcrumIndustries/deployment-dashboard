@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { db, type DeviceInfo } from '../lib/db-setup';
+import { db, type DeviceInfo } from '../../shared/lib/db-setup';
 
 export class AuthService {
   private deviceId: string;

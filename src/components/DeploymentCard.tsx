@@ -1,5 +1,13 @@
-
-import { Calendar, Terminal, Server, Shield, Bug, Bell, History, Wrench } from "lucide-react";
+import {
+  Calendar,
+  Terminal,
+  Server,
+  Shield,
+  Bug,
+  Bell,
+  History,
+  Wrench,
+} from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import type { Deployment } from "@/types/deployment";
@@ -30,15 +38,22 @@ interface DeploymentCardProps {
   deployment: Deployment;
   onEdit: () => void;
   onDelete: () => void;
+  onClick?: () => void;
 }
 
-export function DeploymentCard({ deployment, onEdit, onDelete }: DeploymentCardProps) {
+export function DeploymentCard({
+  deployment,
+  onEdit,
+  onDelete,
+}: DeploymentCardProps) {
   const Icon = categoryIcons[deployment.category];
 
   return (
     <div className="deployment-card animate-fade-up group">
       <div className="flex items-start justify-between">
-        <span className={`category-chip ${categoryColors[deployment.category]}`}>
+        <span
+          className={`category-chip ${categoryColors[deployment.category]}`}
+        >
           <Icon className="mr-1 h-3 w-3" />
           {deployment.category}
         </span>
@@ -48,54 +63,66 @@ export function DeploymentCard({ deployment, onEdit, onDelete }: DeploymentCardP
       </div>
       <h3 className="card-title mt-2">{deployment.title}</h3>
       <p className="card-description mt-2">{deployment.description}</p>
-      
+
       {deployment.sections && (
         <div className="mt-4 space-y-4">
           {deployment.sections.prerequisites.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Prerequisites</h4>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                Prerequisites
+              </h4>
               <div className="space-y-2">
                 {deployment.sections.prerequisites.map((script, index) => (
                   <div
                     key={index}
                     className="rounded-md bg-secondary p-2 text-sm font-mono"
                   >
-                    <p className="text-xs text-muted-foreground">{script.name}</p>
-                    <code className="text-primary">{script.command}</code>
+                    <p className="text-xs text-muted-foreground">
+                      {script.name}
+                    </p>
+                    <code className="text-primary">{script.action}</code>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          
+
           {deployment.sections.execution.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Execution</h4>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                Execution
+              </h4>
               <div className="space-y-2">
                 {deployment.sections.execution.map((script, index) => (
                   <div
                     key={index}
                     className="rounded-md bg-secondary p-2 text-sm font-mono"
                   >
-                    <p className="text-xs text-muted-foreground">{script.name}</p>
-                    <code className="text-primary">{script.command}</code>
+                    <p className="text-xs text-muted-foreground">
+                      {script.name}
+                    </p>
+                    <code className="text-primary">{script.action}</code>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          
+
           {deployment.sections.postDeployment.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-muted-foreground mb-2">Post-Deployment</h4>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                Post-Deployment
+              </h4>
               <div className="space-y-2">
                 {deployment.sections.postDeployment.map((script, index) => (
                   <div
                     key={index}
                     className="rounded-md bg-secondary p-2 text-sm font-mono"
                   >
-                    <p className="text-xs text-muted-foreground">{script.name}</p>
-                    <code className="text-primary">{script.command}</code>
+                    <p className="text-xs text-muted-foreground">
+                      {script.name}
+                    </p>
+                    <code className="text-primary">{script.action}</code>
                   </div>
                 ))}
               </div>
@@ -103,20 +130,12 @@ export function DeploymentCard({ deployment, onEdit, onDelete }: DeploymentCardP
           )}
         </div>
       )}
-      
+
       <div className="mt-4 flex justify-end space-x-2 opacity-0 transition-opacity group-hover:opacity-100">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onEdit}
-        >
+        <Button variant="secondary" size="sm" onClick={onEdit}>
           Edit
         </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onDelete}
-        >
+        <Button variant="destructive" size="sm" onClick={onDelete}>
           Delete
         </Button>
       </div>

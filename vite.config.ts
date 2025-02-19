@@ -19,19 +19,18 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@shared": path.resolve(__dirname, "./shared")
     }
   },
   build: {
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html'),
-        server: path.resolve(__dirname, 'src/server/pouchdb-server.ts')
+        main: path.resolve(__dirname, 'index.html')
       },
       output: {
-        // Separate server and client bundles
-        dir: 'dist',
-        format: 'cjs',
-        entryFileNames: '[name].js'
+        dir: 'dist/assets',
+        format: 'es',
+        entryFileNames: '[name].[hash].js'
       }
     }
   }

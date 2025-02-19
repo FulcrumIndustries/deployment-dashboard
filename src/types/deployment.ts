@@ -1,24 +1,6 @@
+import type { DeploymentCategory, DeploymentStep, Prerequisite } from "../../shared/lib/db-setup";
 
-export type DeploymentCategory =
-  | "Infrastructure"
-  | "Software"
-  | "Testing"
-  | "Monitoring"
-  | "Security"
-  | "Backup"
-  | "Process"
-  | "Tools";
-
-export interface DeploymentScript {
-  name: string;
-  command: string;
-}
-
-export interface DeploymentSection {
-  prerequisites: DeploymentScript[];
-  execution: DeploymentScript[];
-  postDeployment: DeploymentScript[];
-}
+export type { DeploymentCategory };
 
 export interface Deployment {
   id: string;
@@ -26,5 +8,9 @@ export interface Deployment {
   description: string;
   date: Date;
   category: DeploymentCategory;
-  sections: DeploymentSection;
+  sections?: {
+    prerequisites: Prerequisite[];
+    execution: DeploymentStep[];
+    postDeployment: DeploymentStep[];
+  };
 }

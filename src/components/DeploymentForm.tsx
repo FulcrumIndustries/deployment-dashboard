@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Calendar as CalendarIcon, Plus, X } from "lucide-react";
@@ -38,6 +37,7 @@ interface DeploymentFormProps {
   deployment?: Deployment;
   onSubmit: (data: Partial<Deployment>) => void;
   onCancel: () => void;
+  onSuccess: () => void;
 }
 
 interface ScriptSectionProps {

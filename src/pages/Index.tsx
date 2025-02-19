@@ -22,7 +22,8 @@ import {
   type DeploymentStep,
   type DeploymentInfo,
   type Prerequisite,
-} from "../lib/db-setup";
+  type DeploymentCategory,
+} from "../../shared/lib/db-setup";
 import {
   Box,
   Container,
@@ -75,7 +76,7 @@ import SettingsEthernetIcon from "@mui/icons-material/SettingsEthernet";
 import MiscellaneousServicesIcon from "@mui/icons-material/MiscellaneousServices";
 import { debug } from "../utils/debug";
 import PresenceIndicator from "@/components/PresenceIndicator";
-import { setupRealtime } from "../lib/db-setup";
+import { setupRealtime } from "../../shared/lib/db-setup";
 import { useLiveQuery, useObservable } from "dexie-react-hooks";
 import { liveQuery } from "dexie";
 import throttle from "lodash.throttle";
@@ -367,11 +368,16 @@ const Index = () => {
         title: "New Deployment",
         description: "",
         date: new Date(),
-        category: "General",
+        category: "Infrastructure" as DeploymentCategory,
         createdAt: new Date(),
         modifiedAt: new Date(),
         version: 1,
         deleted: false,
+        sections: {
+          prerequisites: [],
+          execution: [],
+          postDeployment: [],
+        },
       };
 
       const id = await db.addDeployment(newDeployment);
@@ -420,6 +426,7 @@ const Index = () => {
         type: "database",
         name: "New Step",
         action: "",
+        command: "",
         actor: "",
         isDone: false,
         version: 1,
@@ -536,6 +543,7 @@ const Index = () => {
         type: "database",
         name: "New Prerequisite",
         action: "",
+        command: "",
         actor: "",
         isDone: false,
         version: 1,

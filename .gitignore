@@ -23,33 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# PouchDB
-pouchdb-debug.log*
-
-# PouchDB sync
-pouchdb-sync-debug.log*
-
-# PouchDB replication
-pouchdb-replication-debug.log*
-
-# PouchDB find
-pouchdb-find-debug.log*
-
-# PouchDB authentication
-pouchdb-authentication-debug.log*
-
-# PouchDB authentication
-pouchdb-authentication-debug.log*
-
-# PouchDB authentication
-pouchdb-authentication-debug.log*
-
-# PouchDB db-setup
-info*
-prerequisites*
-steps*
-deployments*    
-
 # executable files
 executables*
 
