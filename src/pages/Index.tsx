@@ -10,7 +10,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import type { Deployment } from "../services/DeploymentDatabase";
+import {
+  db,
+  type Deployment,
+  type DeploymentStep,
+  type DeploymentInfo,
+  type Prerequisite,
+} from "../lib/db-setup";
 import {
   Box,
   Container,
@@ -43,7 +49,6 @@ import PythonIcon from "@mui/icons-material/Code";
 import EmailIcon from "@mui/icons-material/Email";
 import FolderIcon from "@mui/icons-material/Folder";
 import { v4 as uuidv4 } from "uuid";
-import { db, DeploymentStep } from "../services/DeploymentDatabase";
 import { WavesBackground } from "@/components/WavesBackground";
 import { useNavigate, useParams } from "react-router-dom";
 import { styled } from "@mui/material/styles";
@@ -60,47 +65,24 @@ import ListAltIcon from "@mui/icons-material/ListAlt";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useSnackbar } from "notistack";
+import SettingsEthernetIcon from "@mui/icons-material/SettingsEthernet";
+import MiscellaneousServicesIcon from "@mui/icons-material/MiscellaneousServices";
+import { debug } from "../utils/debug";
+import PresenceIndicator from "@/components/PresenceIndicator";
+import { setupRealtime } from "../lib/db-setup";
+import { useObservable } from "dexie-react-hooks";
+import { liveQuery } from "dexie";
 
 interface Step {
   id: number;
-  done: boolean;
-  type: string; // You might use an enum or a more specific type later
+  deploymentId: number;
+  datetime: Date;
+  type: string;
   name: string;
   action: string;
-  comment: string;
+  actor: string;
+  isDone: boolean;
 }
-
-const mockDeployments: Deployment[] = [
-  {
-    id: "1",
-    title: "Production Database Migration",
-    description:
-      "Scheduled database migration with zero downtime deployment strategy",
-    date: new Date("2024-04-15"),
-    category: "Infrastructure",
-    createdAt: new Date(),
-    steps: [],
-  },
-  {
-    id: "2",
-    title: "Security Patch Deployment",
-    description:
-      "Critical security updates for web servers and application endpoints",
-    date: new Date("2024-04-20"),
-    category: "Security",
-    createdAt: new Date(),
-    steps: [],
-  },
-  {
-    id: "3",
-    title: "Monitoring System Update",
-    description: "Upgrade monitoring stack and implement new alert rules",
-    date: new Date("2024-04-25"),
-    category: "Monitoring",
-    createdAt: new Date(),
-    steps: [],
-  },
-];
 
 const getIconForType = (type: string) => {
   switch (type) {
@@ -120,8 +102,6 @@ const getIconForType = (type: string) => {
       return <MonitorIcon />;
     case "configure":
       return <TuneIcon />;
-    case "prerequisite":
-      return <ListAltIcon />;
     case "rollback":
       return <RestoreIcon />;
     default:
@@ -133,62 +113,68 @@ const typeOptions = [
   {
     value: "database",
     label: "Database",
-    color: "#00758F",
+    color: "#0891b2", // Cyan
     icon: <StorageIcon />,
   },
   {
     value: "scripting",
     label: "Scripting",
-    color: "#4EAA25",
+    color: "#059669", // Emerald
     icon: <CodeIcon />,
   },
   {
     value: "api",
     label: "API",
-    color: "#3776AB",
+    color: "#6366f1", // Indigo
     icon: <ApiIcon />,
   },
   {
     value: "files",
     label: "Files",
-    color: "#FFA500",
+    color: "#f59e0b", // Amber
     icon: <FolderIcon />,
   },
   {
     value: "mail",
     label: "Mail",
-    color: "#EA4335",
+    color: "#dc2626", // Red
     icon: <EmailIcon />,
   },
   {
     value: "backup",
     label: "Backup",
-    color: "#1E88E5",
+    color: "#2563eb", // Blue
     icon: <BackupIcon />,
   },
   {
     value: "monitor",
     label: "Monitor",
-    color: "#7E57C2",
+    color: "#7c3aed", // Violet
     icon: <MonitorIcon />,
   },
   {
     value: "configure",
     label: "Configure",
-    color: "#43A047",
+    color: "#16a34a", // Green
     icon: <TuneIcon />,
-  },
-  {
-    value: "prerequisite",
-    label: "Prerequisite",
-    color: "#FB8C00",
-    icon: <ListAltIcon />,
   },
   {
     value: "rollback",
     label: "Rollback",
-    color: "#E53935",
+    color: "#be123c", // Rose
     icon: <RestoreIcon />,
+  },
+  {
+    value: "service",
+    label: "Service",
+    color: "#0d9488", // Teal
+    icon: <MiscellaneousServicesIcon />,
+  },
+  {
+    value: "network",
+    label: "Network",
+    color: "#0369a1", // Sky Blue
+    icon: <SettingsEthernetIcon />,
   },
 ];
 
@@ -228,20 +214,16 @@ const AnimatedContainer = styled(Container)`
 const Index = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [deployments, setDeployments] = useState<Deployment[]>(mockDeployments);
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [editingDeployment, setEditingDeployment] = useState<
     Deployment | undefined
   >();
   const [mode, setMode] = useState<"choice" | "new" | "existing">("choice");
-  const [deploymentId, setDeploymentId] = useState("");
-  const [steps, setSteps] = useState<DeploymentStep[]>([]);
-  const [currentDeployment, setCurrentDeployment] = useState<Deployment | null>(
-    null
-  );
+  const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [storedDeployments, setStoredDeployments] = useState<Deployment[]>([]);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [deploymentIdInput, setDeploymentIdInput] = useState("");
+  const [deploymentIdInput, setDeploymentIdInput] = useState<string>("");
   const { enqueueSnackbar } = useSnackbar();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deploymentToDelete, setDeploymentToDelete] = useState<string | null>(
@@ -273,35 +255,25 @@ const Index = () => {
     const loadDeployment = async () => {
       if (id) {
         try {
-          const deployment = await db.deployments.get(id);
+          const deployment = await db.getDeployment(id);
           if (!deployment) {
             navigate("/");
-            enqueueSnackbar("Deployment not found", {
-              variant: "error",
-              anchorOrigin: { vertical: "bottom", horizontal: "center" },
-            });
+            enqueueSnackbar("Deployment not found", { variant: "error" });
             return;
           }
 
-          // Load the deployment steps
-          const deploymentSteps = await db.steps
-            .where("deploymentId")
-            .equals(id)
-            .toArray();
-
-          // Sort steps by number
-          deploymentSteps.sort((a, b) => a.number - b.number);
-
-          setCurrentDeployment(deployment);
+          // Set the deploymentId from URL parameter
           setDeploymentId(id);
-          setSteps(deploymentSteps);
+
+          const [steps, prerequisites, info] = await Promise.all([
+            db.steps.where("deploymentId").equals(id).toArray(),
+            db.prerequisites.where("deploymentId").equals(id).toArray(),
+            db.info.where("deploymentId").equals(id).toArray(),
+          ]);
         } catch (error) {
           console.error("Error loading deployment:", error);
           navigate("/");
-          enqueueSnackbar("Error loading deployment", {
-            variant: "error",
-            anchorOrigin: { vertical: "bottom", horizontal: "center" },
-          });
+          enqueueSnackbar("Error loading deployment", { variant: "error" });
         }
       }
     };
@@ -309,23 +281,10 @@ const Index = () => {
     loadDeployment();
   }, [id, navigate]);
 
-  React.useEffect(() => {
-    if (!id) {
-      const loadDeployments = async () => {
-        try {
-          const deployments = await db.deployments.toArray();
-          // Sort by creation date, newest first
-          deployments.sort(
-            (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-          );
-          setStoredDeployments(deployments);
-        } catch (error) {
-          console.error("Error loading deployments:", error);
-        }
-      };
-      loadDeployments();
-    }
-  }, [id]);
+  const loadDeployments = async () => {
+    const deployments = await db.deployments.toArray();
+    setDeployments(deployments);
+  };
 
   const handleCreate = (newDeployment: Partial<Deployment>) => {
     setDeployments((prev) => [...prev, newDeployment as Deployment]);
@@ -351,30 +310,82 @@ const Index = () => {
     setIsOpen(true);
   };
 
-  const handleNewDeployment = () => {
-    const newId = uuidv4();
-    const newDeployment = {
-      id: newId,
-      title: "New Deployment",
-      createdAt: new Date(),
-      steps: [],
-    };
+  const handleTitleChange = async (newTitle: string) => {
+    try {
+      if (!deploymentId) return;
 
-    db.deployments.add(newDeployment).then(() => {
-      setDeploymentId(newId);
-      setCurrentDeployment(newDeployment);
-      setSteps([]);
-      setMode("existing");
-      setStoredDeployments((prev) => [newDeployment, ...prev]);
-      navigate(`/deployment/${newId}`);
-    });
+      // Update local state first for immediate feedback
+      setCurrentDeployment((prev) =>
+        prev ? { ...prev, title: newTitle } : null
+      );
+
+      // Update database
+      await db.deployments.update(deploymentId, { title: newTitle });
+
+      // Broadcast change via WebSocket
+      const ws = new WebSocket(
+        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
+          window.location.host
+        }/ws`
+      );
+      ws.onopen = async () => {
+        const deployment = await db.deployments.get(deploymentId);
+        if (!deployment) return;
+
+        ws.send(
+          JSON.stringify({
+            type: "SYNC_STATE",
+            deploymentId,
+            data: {
+              deployment,
+              steps: await db.steps.where({ deploymentId }).toArray(),
+              prerequisites: await db.prerequisites
+                .where({ deploymentId })
+                .toArray(),
+              info: await db.info.where({ deploymentId }).toArray(),
+            },
+          })
+        );
+      };
+    } catch (error) {
+      console.error("Error updating title:", error);
+      enqueueSnackbar("Error updating title", { variant: "error" });
+    }
+  };
+
+  const handleNewDeployment = async () => {
+    try {
+      const newDeployment = {
+        id: uuidv4(),
+        title: "New Deployment",
+        description: "",
+        date: new Date(),
+        category: "General",
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+        version: 1,
+        deleted: false,
+      };
+
+      const id = await db.addDeployment(newDeployment);
+      const created = await db.getDeployment(id);
+      if (created) {
+        navigate(`/deployment/${created.id}`);
+        enqueueSnackbar("Deployment created successfully", {
+          variant: "success",
+        });
+      }
+    } catch (error) {
+      console.error("Error creating deployment:", error);
+      enqueueSnackbar("Error creating deployment", { variant: "error" });
+    }
   };
 
   const handleExistingDeployment = async () => {
     if (!deploymentId) return;
 
     try {
-      const deployment = await db.deployments.get(deploymentId);
+      const deployment = await db.getDeployment(deploymentId);
       if (!deployment) {
         enqueueSnackbar("Deployment not found", {
           variant: "error",
@@ -382,8 +393,6 @@ const Index = () => {
         });
         return;
       }
-      setCurrentDeployment(deployment);
-      setSteps(deployment.steps || []);
       navigate(`/deployment/${deploymentId}`);
     } catch (error) {
       console.error("Error loading deployment:", error);
@@ -394,85 +403,297 @@ const Index = () => {
     }
   };
 
-  const addStep = () => {
-    const newStep: DeploymentStep = {
-      id: Date.now(),
-      deploymentId,
-      number: steps.length + 1,
-      type: "prerequisite",
-      name: "",
-      action: "",
-      comment: "",
-      isDone: false,
-    };
-    setSteps([...steps, newStep]);
-    db.steps.add(newStep);
-  };
-
-  const updateStep = (
-    index: number,
-    field: keyof DeploymentStep,
-    value: any
-  ) => {
-    const updatedSteps = [...steps];
-    updatedSteps[index] = { ...updatedSteps[index], [field]: value };
-    setSteps(updatedSteps);
-    db.steps.update(updatedSteps[index].id, { [field]: value });
-  };
-
-  const deleteStep = (stepId: number) => {
-    db.steps.delete(stepId);
-    setSteps(steps.filter((step) => step.id !== stepId));
-  };
-
-  const handleLoadDeployment = async () => {
-    if (!deploymentIdInput) {
-      enqueueSnackbar("Please enter a deployment ID", {
-        variant: "warning",
-        anchorOrigin: { vertical: "bottom", horizontal: "center" },
-      });
+  const handleAddStep = async () => {
+    if (!deploymentId) {
+      enqueueSnackbar("No deployment selected", { variant: "warning" });
       return;
     }
 
     try {
-      const deployment = await db.deployments.get(deploymentIdInput);
+      await db.addStep({
+        deploymentId,
+        type: "database",
+        name: "New Step",
+        action: "",
+        actor: "",
+        isDone: false,
+        number: steps.length + 1,
+        datetime: new Date(),
+        version: 1,
+      });
+    } catch (error) {
+      console.error("Error adding step:", error);
+      enqueueSnackbar("Error adding step", { variant: "error" });
+    }
+  };
+
+  const updateStep = async (id: string, changes: Partial<DeploymentStep>) => {
+    try {
+      await db.steps.update(id, changes);
+    } catch (error) {
+      console.error("Error updating step:", error);
+      enqueueSnackbar("Error updating step", { variant: "error" });
+    }
+  };
+
+  const deleteStep = async (id: string) => {
+    try {
+      await db.deleteStep(id);
+    } catch (error) {
+      console.error("Error deleting step:", error);
+      enqueueSnackbar("Error deleting step", { variant: "error" });
+    }
+  };
+
+  const handleLoadDeployment = async () => {
+    const id = deploymentIdInput.trim();
+    if (!id) {
+      enqueueSnackbar("Please enter a deployment ID", { variant: "warning" });
+      return;
+    }
+
+    try {
+      const deployment = await db.getDeployment(id);
       if (!deployment) {
-        enqueueSnackbar("Deployment not found", {
-          variant: "error",
-          anchorOrigin: { vertical: "bottom", horizontal: "center" },
-        });
+        enqueueSnackbar("Deployment not found", { variant: "error" });
         return;
       }
-      navigate(`/deployment/${deploymentIdInput}`);
+
+      const steps = await db.steps.where("deploymentId").equals(id).toArray();
+      const prerequisites = await db.prerequisites
+        .where("deploymentId")
+        .equals(id)
+        .toArray();
+      const info = await db.info.where("deploymentId").equals(id).toArray();
+
+      navigate(`/deployment/${deployment.id}`);
     } catch (error) {
       console.error("Error loading deployment:", error);
-      enqueueSnackbar("Error loading deployment", {
-        variant: "error",
-        anchorOrigin: { vertical: "bottom", horizontal: "center" },
-      });
+      enqueueSnackbar("Error loading deployment", { variant: "error" });
     }
   };
 
   const handleDeleteDeployment = async (deploymentId: string) => {
     try {
-      await db.deployments.delete(deploymentId);
-      // Also delete associated steps
-      await db.steps.where("deploymentId").equals(deploymentId).delete();
+      await db.deleteDeployment(deploymentId);
       setStoredDeployments((prev) => prev.filter((d) => d.id !== deploymentId));
       enqueueSnackbar("Deployment deleted successfully", {
+        variant: "success",
+      });
+      navigate("/");
+    } catch (error) {
+      console.error("Error deleting deployment:", error);
+      enqueueSnackbar("Error deleting deployment", { variant: "error" });
+    }
+    setConfirmingDeleteId(null);
+  };
+
+  const handleAddInfo = async () => {
+    if (!deploymentId) return;
+
+    try {
+      await db.addInfo({
+        deploymentId,
+        information: "New Information",
+        version: 1,
+        modifiedAt: new Date(),
+      });
+    } catch (error) {
+      console.error("Error adding info:", error);
+      enqueueSnackbar("Error adding info", { variant: "error" });
+    }
+  };
+
+  const handleAddPrerequisite = async () => {
+    if (!deploymentId) return;
+
+    try {
+      await db.addPrerequisite({
+        deploymentId,
+        type: "general",
+        name: "New Prerequisite",
+        action: "",
+        actor: "",
+        isDone: false,
+        number: prerequisites.length + 1,
+        version: 1,
+        modifiedAt: new Date(),
+      });
+    } catch (error) {
+      console.error("Error adding prerequisite:", error);
+      enqueueSnackbar("Error adding prerequisite", { variant: "error" });
+    }
+  };
+
+  const updatePrerequisite = async (
+    id: string,
+    changes: Partial<Prerequisite>
+  ) => {
+    try {
+      await db.prerequisites.update(id, {
+        ...changes,
+        modifiedAt: new Date(),
+      });
+    } catch (error) {
+      console.error("Error updating prerequisite:", error);
+      enqueueSnackbar("Error updating prerequisite", { variant: "error" });
+    }
+  };
+
+  const deletePrerequisite = async (id: string) => {
+    try {
+      await db.deletePrerequisite(id);
+    } catch (error) {
+      console.error("Error deleting prerequisite:", error);
+      enqueueSnackbar("Error deleting prerequisite", { variant: "error" });
+    }
+  };
+
+  const handleAddDeployment = async (deployment: Deployment) => {
+    try {
+      await db.addDeployment(deployment);
+      setStoredDeployments([...storedDeployments, deployment]);
+      setDeploymentId(deployment.id);
+      navigate(`/deployment/${deployment.id}`);
+      enqueueSnackbar("Deployment created successfully", {
         variant: "success",
         anchorOrigin: { vertical: "bottom", horizontal: "center" },
       });
     } catch (error) {
-      console.error("Error deleting deployment:", error);
-      enqueueSnackbar("Error deleting deployment", {
+      console.error("Error adding deployment:", error);
+      enqueueSnackbar("Error creating deployment", {
         variant: "error",
         anchorOrigin: { vertical: "bottom", horizontal: "center" },
       });
     }
-    setDeleteDialogOpen(false);
-    setDeploymentToDelete(null);
   };
+
+  // Update ID conversions
+  const idParam = id ? Number(id) : null;
+  const deploymentIdNum = deploymentId ? Number(deploymentId) : null;
+
+  // Add this useEffect to load all entities
+  useEffect(() => {
+    const loadAll = async () => {
+      if (deploymentId) {
+        const [steps, prerequisites, info] = await Promise.all([
+          db.steps.where({ deploymentId }).toArray(),
+          db.prerequisites.where({ deploymentId }).toArray(),
+          db.info.where({ deploymentId }).toArray(),
+        ]);
+      }
+    };
+    loadAll();
+  }, [deploymentId]);
+
+  // Add this useEffect near other useEffect hooks
+  useEffect(() => {
+    const loadInitialDeployments = async () => {
+      try {
+        const deployments = await db.deployments.toArray();
+        setStoredDeployments(deployments);
+      } catch (error) {
+        console.error("Error loading deployments:", error);
+        enqueueSnackbar("Error loading deployments", { variant: "error" });
+      }
+    };
+
+    if (!id) {
+      loadInitialDeployments();
+    }
+  }, [id]);
+
+  // Update the copy ID handler
+  const handleCopyId = () => {
+    if (!deploymentId) return;
+
+    if (navigator.clipboard) {
+      navigator.clipboard
+        .writeText(deploymentId)
+        .then(() => {
+          setCopySuccess(true);
+          setTimeout(() => setCopySuccess(false), 2000);
+        })
+        .catch((error) => {
+          console.error("Failed to copy:", error);
+          enqueueSnackbar("Failed to copy ID", { variant: "error" });
+        });
+    } else {
+      // Fallback for browsers without clipboard API
+      const textArea = document.createElement("textarea");
+      textArea.value = deploymentId;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    }
+  };
+
+  useEffect(() => {
+    if (!deploymentId) return;
+    const cleanup = setupRealtime(deploymentId);
+    return () => cleanup();
+  }, [deploymentId]);
+
+  // Replace direct queries with liveQuery wrappers
+  const steps =
+    useObservable(() =>
+      deploymentId
+        ? liveQuery(() =>
+            db.steps.where("deploymentId").equals(deploymentId).sortBy("number")
+          )
+        : liveQuery(() => [])
+    ) ?? [];
+
+  const prerequisites =
+    useObservable(() =>
+      deploymentId
+        ? liveQuery(() =>
+            db.prerequisites
+              .where("deploymentId")
+              .equals(deploymentId)
+              .sortBy("number")
+          )
+        : liveQuery(() => [])
+    ) ?? [];
+
+  const deploymentInfo =
+    useObservable(() =>
+      deploymentId
+        ? liveQuery(() =>
+            db.info.where("deploymentId").equals(deploymentId).toArray()
+          )
+        : liveQuery(() => [])
+    ) ?? [];
+
+  const [currentDeployment, setCurrentDeployment] = useState<Deployment | null>(
+    null
+  );
+
+  useEffect(() => {
+    const loadCurrentDeployment = async () => {
+      if (deploymentId) {
+        const deployment = await db.deployments.get(deploymentId);
+        setCurrentDeployment(deployment || null);
+      }
+    };
+    loadCurrentDeployment();
+  }, [deploymentId]);
+
+  // Change from Dexie's subscribe to liveQuery
+  useEffect(() => {
+    if (!deploymentId) return;
+
+    const subscription = liveQuery(() =>
+      db.deployments.where("id").equals(deploymentId).toArray()
+    ).subscribe((results) => {
+      setCurrentDeployment(results[0] || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [deploymentId]);
 
   if (!id) {
     return (
@@ -825,6 +1046,7 @@ const Index = () => {
           height: "100vh",
           pt: 4,
           pb: 2,
+          animation: "fadeIn 0.5s ease-out",
         }}
         ref={viewportRef}
       >
@@ -870,13 +1092,7 @@ const Index = () => {
               <TextField
                 placeholder="Deployment Name"
                 value={currentDeployment?.title || ""}
-                onChange={(e) => {
-                  const newTitle = e.target.value;
-                  setCurrentDeployment((prev) =>
-                    prev ? { ...prev, title: newTitle } : null
-                  );
-                  db.deployments.update(deploymentId, { title: newTitle });
-                }}
+                onChange={(e) => handleTitleChange(e.target.value)}
                 sx={{
                   width: "50%",
                   "& .MuiOutlinedInput-root": {
@@ -934,11 +1150,7 @@ const Index = () => {
                 </Typography>
                 <IconButton
                   size="small"
-                  onClick={() => {
-                    navigator.clipboard.writeText(deploymentId);
-                    setCopySuccess(true);
-                    setTimeout(() => setCopySuccess(false), 2000);
-                  }}
+                  onClick={handleCopyId}
                   sx={{
                     padding: "4px",
                     "&:hover": {
@@ -984,74 +1196,313 @@ const Index = () => {
                 </Alert>
               </Snackbar>
             </Box>
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" sx={{ mb: 2, color: "#1e293b" }}>
+                Related Information
+              </Typography>
+              <TableContainer
+                component={Paper}
+                sx={{
+                  background: "rgba(255, 255, 255, 0.95)",
+                  backdropFilter: "blur(10px)",
+                  borderRadius: "16px",
+                  boxShadow: "0 4px 30px rgba(0, 0, 0, 0.1)",
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  mb: 4,
+                  "& .MuiTableCell-head": {
+                    color: "#1e293b",
+                    borderBottom: "2px solid rgba(0, 0, 0, 0.1)",
+                    background: "rgba(255, 255, 255, 0.98)",
+                    fontWeight: 600,
+                  },
+                  "& .MuiTableCell-body": {
+                    color: "#334155",
+                    borderColor: "rgba(0, 0, 0, 0.06)",
+                  },
+                  "& .MuiTextField-root": {
+                    "& .MuiOutlinedInput-root": {
+                      backgroundColor: "rgba(0, 0, 0, 0.02)",
+                      color: "#334155",
+                      transition: "all 0.2s ease",
+                      "&:hover": {
+                        backgroundColor: "rgba(0, 0, 0, 0.04)",
+                      },
+                      "&.Mui-focused": {
+                        backgroundColor: "rgba(0, 0, 0, 0.03)",
+                      },
+                    },
+                  },
+                }}
+              >
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>ID</TableCell>
+                      <TableCell>Information</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {deploymentInfo.map((info, index) => (
+                      <TableRow key={info.id}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            value={info.information}
+                            onChange={async (e) => {
+                              try {
+                                await db.info.put({
+                                  ...info,
+                                  information: e.target.value,
+                                });
+                              } catch (error) {
+                                console.error("Error updating info:", error);
+                                enqueueSnackbar("Error updating info", {
+                                  variant: "error",
+                                });
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton
+                            size="small"
+                            onClick={() => deletePrerequisite(info.id)}
+                            sx={{
+                              color: "#ef4444",
+                              "&:hover": {
+                                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                              },
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
+                <MuiButton
+                  variant="contained"
+                  onClick={handleAddInfo}
+                  startIcon={<AddIcon />}
+                >
+                  Add Information
+                </MuiButton>
+              </Box>
+            </Box>
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" sx={{ mb: 2, color: "#1e293b" }}>
+                Prerequisites
+              </Typography>
+              <TableContainer
+                component={Paper}
+                sx={{
+                  background: "rgba(255, 255, 255, 0.95)",
+                  backdropFilter: "blur(10px)",
+                  borderRadius: "16px",
+                  boxShadow: "0 4px 30px rgba(0, 0, 0, 0.1)",
+                  border: "1px solid rgba(0, 0, 0, 0.05)",
+                  mb: 2,
+                }}
+              >
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>ID</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Action</TableCell>
+                      <TableCell>Actor</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {prerequisites.map((prereq, index) => (
+                      <TableRow key={prereq.id}>
+                        <TableCell>{prereq.number}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={prereq.type}
+                            onChange={(e) => {
+                              updatePrerequisite(prereq.id, {
+                                type: e.target.value as DeploymentStep["type"],
+                              });
+                            }}
+                            sx={{
+                              minWidth: 120,
+                              "& .MuiSelect-select": {
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                                color: "white",
+                                backgroundColor: typeOptions.find(
+                                  (t) => t.value === prereq.type
+                                )?.color,
+                                borderRadius: "6px",
+                              },
+                              "& .MuiOutlinedInput-notchedOutline": {
+                                border: "none",
+                              },
+                              "& .MuiSelect-icon": {
+                                color: "white",
+                              },
+                            }}
+                          >
+                            {typeOptions.map((type) => (
+                              <MenuItem
+                                key={type.value}
+                                value={type.value}
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 1,
+                                  color: "white",
+                                  backgroundColor: type.color,
+                                  "&:hover": {
+                                    backgroundColor: type.color,
+                                    filter: "brightness(90%)",
+                                  },
+                                }}
+                              >
+                                {type.icon}
+                                {type.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            value={prereq.name}
+                            onChange={(e) => {
+                              if (prereq && prereq.id) {
+                                updatePrerequisite(prereq.id, {
+                                  name: e.target.value,
+                                });
+                              }
+                            }}
+                            variant="outlined"
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            maxRows={4}
+                            value={prereq.action}
+                            onChange={(e) => {
+                              if (prereq && prereq.id) {
+                                updatePrerequisite(prereq.id, {
+                                  action: e.target.value,
+                                });
+                              }
+                            }}
+                            variant="outlined"
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            value={prereq.actor}
+                            onChange={(e) => {
+                              if (prereq && prereq.id) {
+                                updatePrerequisite(prereq.id, {
+                                  actor: e.target.value,
+                                });
+                              }
+                            }}
+                            variant="outlined"
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={
+                              prereq.isDone ? <CheckCircleIcon /> : undefined
+                            }
+                            label={prereq.isDone ? "DONE" : "TODO"}
+                            onClick={() =>
+                              updatePrerequisite(prereq.id, {
+                                isDone: !prereq.isDone,
+                              })
+                            }
+                            sx={{
+                              backgroundColor: prereq.isDone
+                                ? "rgba(34, 197, 94, 0.1)"
+                                : "rgba(234, 179, 8, 0.1)",
+                              color: prereq.isDone
+                                ? "rgb(21, 128, 61)"
+                                : "rgb(161, 98, 7)",
+                              fontWeight: "600",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              border: `1px solid ${
+                                prereq.isDone
+                                  ? "rgba(34, 197, 94, 0.2)"
+                                  : "rgba(234, 179, 8, 0.2)"
+                              }`,
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton
+                            size="small"
+                            onClick={() => deletePrerequisite(prereq.id)}
+                            sx={{
+                              color: "#ef4444",
+                              "&:hover": {
+                                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                              },
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <Box sx={{ display: "flex", justifyContent: "center" }}>
+                <MuiButton
+                  variant="contained"
+                  onClick={handleAddPrerequisite}
+                  startIcon={<AddIcon />}
+                >
+                  Add Prerequisite
+                </MuiButton>
+              </Box>
+            </Box>
+            <Typography variant="h6" sx={{ mb: 2, color: "#1e293b" }}>
+              Deployment Steps
+            </Typography>
             <TableContainer
               component={Paper}
               sx={{
-                background: "rgba(23, 25, 35, 0.95)",
+                background: "rgba(255, 255, 255, 0.95)",
                 backdropFilter: "blur(10px)",
                 borderRadius: "16px",
-                boxShadow: "0 4px 30px rgba(0, 0, 0, 0.3)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                maxHeight: "inherit", // This will inherit from the parent
-                overflowY: "auto", // Changed from default scroll
+                boxShadow: "0 4px 30px rgba(0, 0, 0, 0.1)",
+                border: "1px solid rgba(0, 0, 0, 0.05)",
+                maxHeight: "inherit",
+                overflowY: "auto",
                 "&::-webkit-scrollbar": {
                   width: "8px",
-                  background: "rgba(255, 255, 255, 0.05)",
+                  background: "rgba(0, 0, 0, 0.03)",
                 },
                 "&::-webkit-scrollbar-thumb": {
-                  background: "rgba(255, 255, 255, 0.2)",
+                  background: "rgba(0, 0, 0, 0.1)",
                   borderRadius: "4px",
-                  opacity: 0, // Start with invisible scrollbar
-                  transition: "opacity 0.3s ease",
                   "&:hover": {
-                    background: "rgba(255, 255, 255, 0.3)",
-                  },
-                },
-                "&:hover::-webkit-scrollbar-thumb": {
-                  opacity: 1, // Show scrollbar on hover
-                },
-                "& .MuiTableCell-head": {
-                  color: "rgba(255, 255, 255, 0.95)",
-                  borderBottom: "2px solid rgba(255, 255, 255, 0.1)",
-                  position: "sticky",
-                  top: 0,
-                  background: "rgba(23, 25, 35, 0.98)",
-                  zIndex: 1,
-                  fontWeight: 600,
-                },
-                "& .MuiTableCell-body": {
-                  color: "rgba(255, 255, 255, 0.9)",
-                  borderColor: "rgba(255, 255, 255, 0.1)",
-                },
-                "& .MuiTextField-root": {
-                  "& .MuiOutlinedInput-root": {
-                    backgroundColor: "rgba(255, 255, 255, 0.07)",
-                    color: "rgba(255, 255, 255, 0.9)",
-                    transition: "all 0.2s ease",
-                    "&:hover": {
-                      backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    },
-                    "&.Mui-focused": {
-                      backgroundColor: "rgba(255, 255, 255, 0.13)",
-                    },
-                    "& fieldset": {
-                      borderColor: "rgba(255, 255, 255, 0.1)",
-                    },
-                  },
-                  "& .MuiOutlinedInput-input": {
-                    "&::placeholder": {
-                      color: "rgba(255, 255, 255, 0.5)",
-                      opacity: 1,
-                    },
-                  },
-                },
-                "& .MuiTableRow-root:hover": {
-                  backgroundColor: "rgba(255, 255, 255, 0.05) !important",
-                },
-                "& .MuiTableRow-root.completed": {
-                  backgroundColor: "rgba(34, 197, 94, 0.05)",
-                  "&:hover": {
-                    backgroundColor: "rgba(34, 197, 94, 0.08) !important",
+                    background: "rgba(0, 0, 0, 0.15)",
                   },
                 },
               }}
@@ -1059,55 +1510,55 @@ const Index = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell
-                      padding="checkbox"
-                      sx={{ width: "48px" }}
-                    ></TableCell>
-                    <TableCell sx={{ width: "60px" }}>ID</TableCell>
-                    <TableCell sx={{ width: "180px" }}>Type</TableCell>
-                    <TableCell sx={{ width: "200px" }}>Name</TableCell>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Datetime</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Name</TableCell>
                     <TableCell>Action</TableCell>
-                    <TableCell sx={{ width: "200px" }}>Comment</TableCell>
-                    <TableCell sx={{ width: "100px" }}>Status</TableCell>
-                    <TableCell sx={{ width: "60px" }}></TableCell>
+                    <TableCell>Actor</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {steps.map((step, index) => (
                     <TableRow
                       key={step.id}
-                      className={step.isDone ? "completed" : ""}
                       sx={{
                         opacity: step.isDone ? 0.85 : 1,
                         transition: "all 0.2s ease",
-                        "&:last-child td, &:last-child th": { border: 0 },
+                        "&:hover": {
+                          backgroundColor: "rgba(0, 0, 0, 0.02)",
+                        },
                       }}
                     >
-                      <TableCell padding="checkbox">
-                        <Checkbox
-                          checked={step.isDone}
-                          onChange={(e) =>
-                            updateStep(index, "isDone", e.target.checked)
-                          }
-                          sx={{ "&.Mui-checked": { color: "#94a3b8" } }}
-                        />
-                      </TableCell>
                       <TableCell>{step.number}</TableCell>
+                      <TableCell>
+                        {new Date(step.datetime).toLocaleString()}
+                      </TableCell>
                       <TableCell>
                         <Select
                           value={step.type}
                           onChange={(e) =>
-                            updateStep(index, "type", e.target.value)
+                            updateStep(step.id, { type: e.target.value })
                           }
                           sx={{
-                            width: "160px",
-                            backgroundColor: typeOptions.find(
-                              (t) => t.value === step.type
-                            )?.color,
-                            color: "white",
-                            "& .MuiSelect-icon": { color: "white" },
+                            minWidth: 120,
+                            "& .MuiSelect-select": {
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              color: "white",
+                              backgroundColor: typeOptions.find(
+                                (t) => t.value === step.type
+                              )?.color,
+                              borderRadius: "6px",
+                            },
                             "& .MuiOutlinedInput-notchedOutline": {
                               border: "none",
+                            },
+                            "& .MuiSelect-icon": {
+                              color: "white",
                             },
                           }}
                         >
@@ -1116,26 +1567,19 @@ const Index = () => {
                               key={type.value}
                               value={type.value}
                               sx={{
-                                backgroundColor: type.color,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
                                 color: "white",
-                                margin: "2px",
-                                borderRadius: "4px",
+                                backgroundColor: type.color,
                                 "&:hover": {
                                   backgroundColor: type.color,
                                   filter: "brightness(90%)",
                                 },
                               }}
                             >
-                              <span
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "8px",
-                                }}
-                              >
-                                {type.icon}
-                                {type.label}
-                              </span>
+                              {type.icon}
+                              {type.label}
                             </MenuItem>
                           ))}
                         </Select>
@@ -1145,96 +1589,57 @@ const Index = () => {
                           fullWidth
                           value={step.name}
                           onChange={(e) =>
-                            updateStep(index, "name", e.target.value)
+                            updateStep(step.id, { name: e.target.value })
                           }
-                          sx={{
-                            opacity: step.isDone ? 0.85 : 1,
-                            "& .MuiOutlinedInput-root": {
-                              backgroundColor: "rgba(255, 255, 255, 0.07)",
-                              color: "rgba(255, 255, 255, 0.9)",
-                              "&:hover": {
-                                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                              },
-                              "&.Mui-focused": {
-                                backgroundColor: "rgba(255, 255, 255, 0.13)",
-                              },
-                            },
-                          }}
                         />
                       </TableCell>
                       <TableCell>
                         <TextField
                           fullWidth
                           multiline
-                          minRows={1}
+                          minRows={2}
                           maxRows={4}
                           value={step.action}
                           onChange={(e) =>
-                            updateStep(index, "action", e.target.value)
+                            updateStep(step.id, { action: e.target.value })
                           }
-                          sx={{
-                            opacity: step.isDone ? 0.85 : 1,
-                            "& .MuiOutlinedInput-root": {
-                              backgroundColor: "rgba(255, 255, 255, 0.07)",
-                              "&:hover": {
-                                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                              },
-                              "&.Mui-focused": {
-                                backgroundColor: "rgba(255, 255, 255, 0.13)",
-                              },
-                            },
-                          }}
                         />
                       </TableCell>
                       <TableCell>
                         <TextField
                           fullWidth
-                          value={step.comment}
+                          value={step.actor}
                           onChange={(e) =>
-                            updateStep(index, "comment", e.target.value)
+                            updateStep(step.id, { actor: e.target.value })
                           }
-                          sx={{
-                            opacity: step.isDone ? 0.85 : 1,
-                            "& .MuiOutlinedInput-root": {
-                              backgroundColor: "rgba(255, 255, 255, 0.07)",
-                              "&:hover": {
-                                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                              },
-                              "&.Mui-focused": {
-                                backgroundColor: "rgba(255, 255, 255, 0.13)",
-                              },
-                            },
-                          }}
                         />
                       </TableCell>
                       <TableCell>
                         <Chip
                           icon={step.isDone ? <CheckCircleIcon /> : undefined}
                           label={step.isDone ? "DONE" : "TODO"}
+                          onClick={() =>
+                            updateStep(step.id, { isDone: !step.isDone })
+                          }
                           sx={{
                             backgroundColor: step.isDone
-                              ? "rgba(34, 197, 94, 0.16)"
-                              : "rgba(234, 179, 8, 0.16)",
+                              ? "rgba(34, 197, 94, 0.1)"
+                              : "rgba(234, 179, 8, 0.1)",
                             color: step.isDone
                               ? "rgb(21, 128, 61)"
                               : "rgb(161, 98, 7)",
                             fontWeight: "600",
                             borderRadius: "6px",
+                            cursor: "pointer",
                             border: `1px solid ${
                               step.isDone
-                                ? "rgba(34, 197, 94, 0.32)"
-                                : "rgba(234, 179, 8, 0.32)"
+                                ? "rgba(34, 197, 94, 0.2)"
+                                : "rgba(234, 179, 8, 0.2)"
                             }`,
-                            transition: "all 0.2s ease",
-                            "& .MuiChip-icon": {
-                              color: step.isDone
-                                ? "rgb(21, 128, 61)"
-                                : "rgb(161, 98, 7)",
-                            },
                           }}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="right">
                         <IconButton
                           size="small"
                           onClick={() => deleteStep(step.id)}
@@ -1272,9 +1677,13 @@ const Index = () => {
                 },
               }}
             >
-              <IconButton color="primary" onClick={addStep}>
-                <AddIcon sx={{ fontSize: "1.5rem" }} />
-              </IconButton>
+              <MuiButton
+                variant="contained"
+                onClick={handleAddStep}
+                startIcon={<AddIcon />}
+              >
+                Add Deployment Step
+              </MuiButton>
             </Box>
           </Box>
         </Box>
@@ -1287,6 +1696,8 @@ const Index = () => {
           100% { transform: scale(1); }
         }
       `}</style>
+
+      <PresenceIndicator deploymentId={deploymentId} />
     </>
   );
 };

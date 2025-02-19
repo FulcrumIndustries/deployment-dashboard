@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node build.cjs",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pkg": "pkg .",
+    "pkg:build": "npm run build && npm run pkg",
+    "setup-db": "ts-node scripts/setup-couchdb.ts",
+    "server": "tsx backend/server.ts",
+    "start": "npm run server"
   },
   "dependencies": {
     "@emotion/styled": "^11.14.0",
@@ -42,12 +47,18 @@
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.4",
     "@tanstack/react-query": "^5.56.2",
+    "@types/pouchdb": "^6.4.2",
+    "@types/ws": "^8.5.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
+    "cors": "^2.8.5",
     "date-fns": "^3.6.0",
-    "dexie": "^3.2.7",
+    "dexie": "^4.0.11",
+    "dexie-react-hooks": "^1.1.7",
     "embla-carousel-react": "^8.3.0",
+    "events": "^3.3.0",
+    "express": "^4.21.2",
     "input-otp": "^1.2.4",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
@@ -64,24 +75,61 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.0.5",
     "vaul": "^0.9.3",
+    "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
     "@tailwindcss/typography": "^0.5.15",
-    "@types/node": "^22.5.5",
+    "@types/node": "^22.13.4",
+    "@types/pouchdb-core": "^7.0.15",
+    "@types/pouchdb-upsert": "^2.2.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^8.0.0",
     "eslint": "^9.9.0",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
     "globals": "^15.9.0",
+    "open": "^10.1.0",
+    "pkg": "^5.8.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.11",
-    "typescript": "^5.5.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5.7.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
+  },
+  "bin": "server.cjs",
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "assets": [
+      "dist/**/*"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "executables",
+    "options": {
+      "public": true
+    },
+    "externals": [
+      "open",
+      "d3-*",
+      "default-browser",
+      "default-browser-id",
+      "is-docker",
+      "is-wsl",
+      "internmap",
+      "run-applescript",
+      "string-width",
+      "strip-ansi",
+      "wrap-ansi",
+      "ansi-regex",
+      "ansi-styles"
+    ]
   }
 }
