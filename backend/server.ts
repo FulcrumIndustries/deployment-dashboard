@@ -1,6 +1,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import express from 'express';
 import http from 'http';
+import { db } from '../src/lib/db-setup';
 
 const app = express();
 const server = http.createServer(app);
@@ -46,6 +47,40 @@ wss.on('connection', (ws, req) => {
           deploymentId: message.deploymentId,
           collaborators: Array.from(collaborators.values())
         }, id);
+        break;
+
+      case 'FULL_SYNC':
+        // Clear existing related data
+        await db.steps.where('deploymentId').equals(message.deploymentId).delete();
+        await db.prerequisites.where('deploymentId').equals(message.deploymentId).delete();
+        await db.info.where('deploymentId').equals(message.deploymentId).delete();
+
+        // Add new data
+        await db.steps.bulkAdd(message.data.steps);
+        await db.prerequisites.bulkAdd(message.data.prerequisites);
+        await db.info.bulkAdd(message.data.info);
+
+        broadcast(message, id);
+        break;
+
+      case 'PARTIAL_SYNC':
+        await db.transaction('rw', db.deployments, db.steps, db.prerequisites, db.info, () => {
+          if (message.data.deployment) db.deployments.put(message.data.deployment);
+          if (message.data.steps) db.steps.bulkPut(message.data.steps);
+          if (message.data.prerequisites) db.prerequisites.bulkPut(message.data.prerequisites);
+          if (message.data.info) db.info.bulkPut(message.data.info);
+        });
+        broadcast(message, id);
+        break;
+
+      case 'DELTA_SYNC':
+        await db.transaction('rw', db.deployments, db.steps, db.prerequisites, db.info, () => {
+          if (message.data.deployment) db.deployments.put(message.data.deployment);
+          if (message.data.steps) db.steps.bulkPut(message.data.steps);
+          if (message.data.prerequisites) db.prerequisites.bulkPut(message.data.prerequisites);
+          if (message.data.info) db.info.bulkPut(message.data.info);
+        });
+        broadcast(message, id);
         break;
     }
   });

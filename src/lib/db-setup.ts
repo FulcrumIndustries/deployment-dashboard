@@ -74,12 +74,12 @@ class AppDatabase extends Dexie {
     constructor() {
         super('DeploymentTracker');
 
-        this.version(5).stores({
+        this.version(7).stores({
             devices: 'id',
             deployments: 'id, title, category, version, deleted',
-            steps: 'id, deploymentId, type, version',
+            steps: 'id, deploymentId, number, version',
             info: 'id, deploymentId, version',
-            prerequisites: 'id, deploymentId, version',
+            prerequisites: 'id, deploymentId, number, version',
             collaborators: 'id, deploymentId'
         });
 
@@ -258,7 +258,15 @@ export const setupRealtime = (deploymentId: string) => {
                     db.deployments.put(msg.data.deployment);
                     window.dispatchEvent(new Event('deployment-update'));
                 }
-                if (msg.data?.steps) db.steps.bulkPut(msg.data.steps);
+                if (msg.data?.steps) {
+                    db.steps.bulkPut(msg.data.steps);
+                    window.dispatchEvent(new CustomEvent('db-update', {
+                        detail: {
+                            type: 'steps',
+                            deploymentId
+                        }
+                    }));
+                }
                 if (msg.data?.prerequisites) db.prerequisites.bulkPut(msg.data.prerequisites);
                 if (msg.data?.info) db.info.bulkPut(msg.data.info);
             });
@@ -282,10 +290,25 @@ export const setupRealtimeLiveQuery = (deploymentId: string) => {
                 db.deployments.put(msg.data.deployment);
                 window.dispatchEvent(new Event('deployment-update'));
             }
-            if (msg.data?.steps) db.steps.bulkPut(msg.data.steps);
+            if (msg.data?.steps) {
+                db.steps.bulkPut(msg.data.steps);
+                window.dispatchEvent(new CustomEvent('db-update', {
+                    detail: {
+                        type: 'steps',
+                        deploymentId
+                    }
+                }));
+            }
             if (msg.data?.prerequisites) db.prerequisites.bulkPut(msg.data.prerequisites);
             if (msg.data?.info) db.info.bulkPut(msg.data.info);
         });
+
+        window.dispatchEvent(new CustomEvent('db-update', {
+            detail: {
+                type: 'partial',
+                deploymentId
+            }
+        }));
     };
     return liveQuery(async () => {
         const [deployment, steps, prerequisites, info] = await Promise.all([

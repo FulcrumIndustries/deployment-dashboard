@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import { Plus } from "lucide-react";
 import { DeploymentCard } from "@/components/DeploymentCard";
 import { DeploymentForm } from "@/components/DeploymentForm";
@@ -70,8 +76,9 @@ import MiscellaneousServicesIcon from "@mui/icons-material/MiscellaneousServices
 import { debug } from "../utils/debug";
 import PresenceIndicator from "@/components/PresenceIndicator";
 import { setupRealtime } from "../lib/db-setup";
-import { useObservable } from "dexie-react-hooks";
+import { useLiveQuery, useObservable } from "dexie-react-hooks";
 import { liveQuery } from "dexie";
+import throttle from "lodash.throttle";
 
 interface Step {
   id: number;
@@ -404,23 +411,25 @@ const Index = () => {
   };
 
   const handleAddStep = async () => {
-    if (!deploymentId) {
-      enqueueSnackbar("No deployment selected", { variant: "warning" });
-      return;
-    }
-
     try {
-      await db.addStep({
+      if (!deploymentId) return;
+
+      const newStep: DeploymentStep = {
+        id: uuidv4(),
         deploymentId,
         type: "database",
         name: "New Step",
         action: "",
         actor: "",
         isDone: false,
-        number: steps.length + 1,
-        datetime: new Date(),
         version: 1,
-      });
+        datetime: new Date(),
+        number: steps.length + 1,
+      };
+
+      await db.steps.add(newStep);
+      syncChanges();
+      enqueueSnackbar("Step added", { variant: "success" });
     } catch (error) {
       console.error("Error adding step:", error);
       enqueueSnackbar("Error adding step", { variant: "error" });
@@ -430,6 +439,7 @@ const Index = () => {
   const updateStep = async (id: string, changes: Partial<DeploymentStep>) => {
     try {
       await db.steps.update(id, changes);
+      syncChanges();
     } catch (error) {
       console.error("Error updating step:", error);
       enqueueSnackbar("Error updating step", { variant: "error" });
@@ -438,7 +448,8 @@ const Index = () => {
 
   const deleteStep = async (id: string) => {
     try {
-      await db.deleteStep(id);
+      await db.steps.delete(id);
+      syncChanges();
     } catch (error) {
       console.error("Error deleting step:", error);
       enqueueSnackbar("Error deleting step", { variant: "error" });
@@ -489,15 +500,23 @@ const Index = () => {
   };
 
   const handleAddInfo = async () => {
-    if (!deploymentId) return;
-
     try {
-      await db.addInfo({
+      if (!deploymentId) {
+        enqueueSnackbar("No deployment selected", { variant: "warning" });
+        return;
+      }
+
+      const newInfo: DeploymentInfo = {
+        id: uuidv4(),
         deploymentId,
         information: "New Information",
         version: 1,
         modifiedAt: new Date(),
-      });
+      };
+
+      await db.info.add(newInfo);
+      syncChanges();
+      enqueueSnackbar("Info added successfully", { variant: "success" });
     } catch (error) {
       console.error("Error adding info:", error);
       enqueueSnackbar("Error adding info", { variant: "error" });
@@ -505,19 +524,29 @@ const Index = () => {
   };
 
   const handleAddPrerequisite = async () => {
-    if (!deploymentId) return;
-
     try {
-      await db.addPrerequisite({
+      if (!deploymentId) {
+        enqueueSnackbar("No deployment selected", { variant: "warning" });
+        return;
+      }
+
+      const newPrerequisite: Prerequisite = {
+        id: uuidv4(),
         deploymentId,
-        type: "general",
+        type: "database",
         name: "New Prerequisite",
         action: "",
         actor: "",
         isDone: false,
-        number: prerequisites.length + 1,
         version: 1,
         modifiedAt: new Date(),
+        number: prerequisites.length + 1,
+      };
+
+      await db.prerequisites.add(newPrerequisite);
+      syncChanges();
+      enqueueSnackbar("Prerequisite added successfully", {
+        variant: "success",
       });
     } catch (error) {
       console.error("Error adding prerequisite:", error);
@@ -534,6 +563,7 @@ const Index = () => {
         ...changes,
         modifiedAt: new Date(),
       });
+      syncChanges();
     } catch (error) {
       console.error("Error updating prerequisite:", error);
       enqueueSnackbar("Error updating prerequisite", { variant: "error" });
@@ -543,6 +573,7 @@ const Index = () => {
   const deletePrerequisite = async (id: string) => {
     try {
       await db.deletePrerequisite(id);
+      syncChanges();
     } catch (error) {
       console.error("Error deleting prerequisite:", error);
       enqueueSnackbar("Error deleting prerequisite", { variant: "error" });
@@ -637,36 +668,62 @@ const Index = () => {
     return () => cleanup();
   }, [deploymentId]);
 
-  // Replace direct queries with liveQuery wrappers
-  const steps =
-    useObservable(() =>
-      deploymentId
-        ? liveQuery(() =>
-            db.steps.where("deploymentId").equals(deploymentId).sortBy("number")
-          )
-        : liveQuery(() => [])
-    ) ?? [];
+  // Replace useLiveQuery hooks with manual subscriptions
+  const [steps, setSteps] = useState<DeploymentStep[]>([]);
+  const [prerequisites, setPrerequisites] = useState<Prerequisite[]>([]);
+  const [info, setInfo] = useState<DeploymentInfo[]>([]);
 
-  const prerequisites =
-    useObservable(() =>
-      deploymentId
-        ? liveQuery(() =>
-            db.prerequisites
-              .where("deploymentId")
-              .equals(deploymentId)
-              .sortBy("number")
-          )
-        : liveQuery(() => [])
-    ) ?? [];
+  useEffect(() => {
+    if (!deploymentId) return;
 
-  const deploymentInfo =
-    useObservable(() =>
-      deploymentId
-        ? liveQuery(() =>
-            db.info.where("deploymentId").equals(deploymentId).toArray()
-          )
-        : liveQuery(() => [])
-    ) ?? [];
+    const updateSteps = () => {
+      db.steps
+        .where("deploymentId")
+        .equals(deploymentId)
+        .sortBy("number")
+        .then(setSteps);
+    };
+
+    const updatePrerequisites = () => {
+      db.prerequisites
+        .where("deploymentId")
+        .equals(deploymentId)
+        .sortBy("number")
+        .then(setPrerequisites);
+    };
+
+    const updateInfo = () => {
+      db.info
+        .where("deploymentId")
+        .equals(deploymentId)
+        .toArray()
+        .then(setInfo);
+    };
+
+    // Initial load
+    updateSteps();
+    updatePrerequisites();
+    updateInfo();
+
+    // Subscribe to updates
+    const stepsSubscription = liveQuery(() =>
+      db.steps.where("deploymentId").equals(deploymentId).toArray()
+    ).subscribe(updateSteps);
+
+    const prereqSubscription = liveQuery(() =>
+      db.prerequisites.where("deploymentId").equals(deploymentId).toArray()
+    ).subscribe(updatePrerequisites);
+
+    const infoSubscription = liveQuery(() =>
+      db.info.where("deploymentId").equals(deploymentId).toArray()
+    ).subscribe(updateInfo);
+
+    return () => {
+      stepsSubscription.unsubscribe();
+      prereqSubscription.unsubscribe();
+      infoSubscription.unsubscribe();
+    };
+  }, [deploymentId]);
 
   const [currentDeployment, setCurrentDeployment] = useState<Deployment | null>(
     null
@@ -694,6 +751,76 @@ const Index = () => {
 
     return () => subscription.unsubscribe();
   }, [deploymentId]);
+
+  const syncChanges = useCallback(async () => {
+    if (!deploymentId) return;
+
+    try {
+      const [deployment, steps, prerequisites, info] = await Promise.all([
+        db.deployments.get(deploymentId),
+        db.steps.where("deploymentId").equals(deploymentId).sortBy("number"),
+        db.prerequisites
+          .where("deploymentId")
+          .equals(deploymentId)
+          .sortBy("number"),
+        db.info.where("deploymentId").equals(deploymentId).toArray(),
+      ]);
+
+      const ws = new WebSocket(
+        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
+          window.location.host
+        }/ws`
+      );
+      ws.onopen = () => {
+        ws.send(
+          JSON.stringify({
+            type: "DELTA_SYNC",
+            deploymentId,
+            data: { deployment, steps, prerequisites, info },
+            timestamp: Date.now(),
+          })
+        );
+      };
+    } catch (error) {
+      console.error("Sync error:", error);
+    }
+  }, [deploymentId]);
+
+  // Add event listener in component
+  useEffect(() => {
+    const handler = (event: CustomEvent) => {
+      if (
+        event.detail.type === "partial" &&
+        event.detail.deploymentId === deploymentId
+      ) {
+        // Only update relevant state
+        db.steps
+          .where("deploymentId")
+          .equals(deploymentId)
+          .sortBy("number")
+          .then(setSteps);
+        db.prerequisites
+          .where("deploymentId")
+          .equals(deploymentId)
+          .sortBy("number")
+          .then(setPrerequisites);
+        db.info
+          .where("deploymentId")
+          .equals(deploymentId)
+          .toArray()
+          .then(setInfo);
+      }
+    };
+
+    window.addEventListener("db-update", handler);
+    return () => window.removeEventListener("db-update", handler);
+  }, [deploymentId]);
+
+  // Add this at the top
+  const throttledSync = useMemo(
+    () => throttle(syncChanges, 1000),
+    [syncChanges]
+  );
 
   if (!id) {
     return (
@@ -1243,7 +1370,7 @@ const Index = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {deploymentInfo.map((info, index) => (
+                    {info.map((info, index) => (
                       <TableRow key={info.id}>
                         <TableCell>{index + 1}</TableCell>
                         <TableCell>
@@ -1256,6 +1383,7 @@ const Index = () => {
                                   ...info,
                                   information: e.target.value,
                                 });
+                                syncChanges();
                               } catch (error) {
                                 console.error("Error updating info:", error);
                                 enqueueSnackbar("Error updating info", {
@@ -1332,6 +1460,7 @@ const Index = () => {
                               updatePrerequisite(prereq.id, {
                                 type: e.target.value as DeploymentStep["type"],
                               });
+                              syncChanges();
                             }}
                             sx={{
                               minWidth: 120,
@@ -1384,6 +1513,7 @@ const Index = () => {
                                 updatePrerequisite(prereq.id, {
                                   name: e.target.value,
                                 });
+                                syncChanges();
                               }
                             }}
                             variant="outlined"
@@ -1402,6 +1532,7 @@ const Index = () => {
                                 updatePrerequisite(prereq.id, {
                                   action: e.target.value,
                                 });
+                                syncChanges();
                               }
                             }}
                             variant="outlined"
@@ -1417,6 +1548,7 @@ const Index = () => {
                                 updatePrerequisite(prereq.id, {
                                   actor: e.target.value,
                                 });
+                                syncChanges();
                               }
                             }}
                             variant="outlined"
@@ -1540,7 +1672,9 @@ const Index = () => {
                         <Select
                           value={step.type}
                           onChange={(e) =>
-                            updateStep(step.id, { type: e.target.value })
+                            updateStep(step.id, {
+                              type: e.target.value as DeploymentStep["type"],
+                            })
                           }
                           sx={{
                             minWidth: 120,
