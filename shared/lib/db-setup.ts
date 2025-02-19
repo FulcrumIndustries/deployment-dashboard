@@ -81,6 +81,25 @@ export interface Collaborator {
     lastSeen: number;
 }
 
+const isServer = typeof window === 'undefined';
+
+const checkIndexedDB = () => {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') {
+        // We're in Node.js, no need for IndexedDB
+        return true;
+    }
+
+    if (!window.indexedDB) {
+        console.warn(
+            'IndexedDB not available. The app will work but changes won\'t be persisted.',
+            '\nThis might happen if you\'re in a private browsing session.'
+        );
+        return false;
+    }
+    return true;
+};
+
 class AppDatabase extends Dexie {
     deployments!: Table<Deployment>;
     steps!: Table<DeploymentStep>;
@@ -90,7 +109,19 @@ class AppDatabase extends Dexie {
     collaborators!: Table<Collaborator>;
 
     constructor() {
+        if (isServer) {
+            return;
+        }
         super('DeploymentTracker');
+
+        // Skip IndexedDB initialization in Node.js environment
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        if (!checkIndexedDB()) {
+            return;
+        }
 
         this.version(7).stores({
             devices: 'id',
@@ -240,7 +271,60 @@ class AppDatabase extends Dexie {
     }
 }
 
-export const db = new AppDatabase();
+// Create a mock database for server-side
+class MockDatabase {
+    private deployments: Map<string, Deployment> = new Map();
+    private steps: Map<string, DeploymentStep[]> = new Map();
+    private prerequisites: Map<string, Prerequisite[]> = new Map();
+    private info: Map<string, DeploymentInfo[]> = new Map();
+
+    async put(table: string, data: any) {
+        switch (table) {
+            case 'deployments':
+                this.deployments.set(data.id, data);
+                break;
+            case 'steps':
+                const steps = this.steps.get(data.deploymentId) || [];
+                steps.push(data);
+                this.steps.set(data.deploymentId, steps);
+                break;
+            // Add other cases as needed
+        }
+        return data.id;
+    }
+
+    async get(table: string, id: string) {
+        switch (table) {
+            case 'deployments':
+                return this.deployments.get(id);
+            case 'steps':
+                return this.steps.get(id);
+            // Add other cases as needed
+            default:
+                return null;
+        }
+    }
+}
+
+// Modify the db export
+export const db = isServer ? new MockDatabase() as any : new AppDatabase();
+
+interface DatabaseError extends Error {
+    name: 'DatabaseClosedError' | 'MissingAPIError';
+}
+
+const wrapDbOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
+    try {
+        return await operation();
+    } catch (error) {
+        if (error instanceof Error &&
+            (error.name === 'DatabaseClosedError' || error.name === 'MissingAPIError')) {
+            console.warn('IndexedDB operation failed (private browsing?)', error);
+            return [] as any;
+        }
+        throw error;
+    }
+};
 
 export const setupRealtime = (deploymentId: string) => {
     let ws: WebSocket;
@@ -268,6 +352,9 @@ export const setupRealtime = (deploymentId: string) => {
         };
 
         ws.onmessage = async (event) => {
+            // Skip database operations on server
+            if (isServer) return;
+
             const msg = JSON.parse(event.data);
             if (msg.deploymentId !== deploymentId) return;
 
@@ -300,6 +387,9 @@ export const setupRealtimeLiveQuery = (deploymentId: string) => {
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     const ws = new WebSocket(wsUrl);
     ws.onmessage = async (event) => {
+        // Skip database operations on server
+        if (isServer) return;
+
         const msg = JSON.parse(event.data);
         if (msg.deploymentId !== deploymentId) return;
 

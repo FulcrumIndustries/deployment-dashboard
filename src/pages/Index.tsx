@@ -5,17 +5,9 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Import } from "lucide-react";
 import { DeploymentCard } from "@/components/DeploymentCard";
-import { DeploymentForm } from "@/components/DeploymentForm";
 import { Button as MuiButton } from "@mui/material";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   db,
   type Deployment,
@@ -80,6 +72,8 @@ import { setupRealtime } from "../../shared/lib/db-setup";
 import { useLiveQuery, useObservable } from "dexie-react-hooks";
 import { liveQuery } from "dexie";
 import throttle from "lodash.throttle";
+import { saveAs } from "file-saver";
+import { Download } from "lucide-react";
 
 interface Step {
   id: number;
@@ -219,24 +213,25 @@ const AnimatedContainer = styled(Container)`
   }
 `;
 
+const CONSOLE_STYLES = {
+  title: "color: #4f46e5; font-weight: bold; font-size: 14px;",
+  info: "color: #0891b2; font-size: 12px;",
+  success: "color: #059669; font-size: 12px;",
+  url: "color: #6366f1; text-decoration: underline; font-size: 12px;",
+};
+
 const Index = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
   const [editingDeployment, setEditingDeployment] = useState<
     Deployment | undefined
   >();
-  const [mode, setMode] = useState<"choice" | "new" | "existing">("choice");
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
   const [storedDeployments, setStoredDeployments] = useState<Deployment[]>([]);
   const [copySuccess, setCopySuccess] = useState(false);
   const [deploymentIdInput, setDeploymentIdInput] = useState<string>("");
   const { enqueueSnackbar } = useSnackbar();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deploymentToDelete, setDeploymentToDelete] = useState<string | null>(
-    null
-  );
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
     null
   );
@@ -292,30 +287,6 @@ const Index = () => {
   const loadDeployments = async () => {
     const deployments = await db.deployments.toArray();
     setDeployments(deployments);
-  };
-
-  const handleCreate = (newDeployment: Partial<Deployment>) => {
-    setDeployments((prev) => [...prev, newDeployment as Deployment]);
-    setIsOpen(false);
-  };
-
-  const handleEdit = (updatedDeployment: Partial<Deployment>) => {
-    setDeployments((prev) =>
-      prev.map((dep) =>
-        dep.id === updatedDeployment.id ? { ...dep, ...updatedDeployment } : dep
-      )
-    );
-    setIsOpen(false);
-    setEditingDeployment(undefined);
-  };
-
-  const handleDelete = (id: string) => {
-    setDeployments((prev) => prev.filter((dep) => dep.id !== id));
-  };
-
-  const openEditSheet = (deployment: Deployment) => {
-    setEditingDeployment(deployment);
-    setIsOpen(true);
   };
 
   const handleTitleChange = async (newTitle: string) => {
@@ -830,6 +801,107 @@ const Index = () => {
     [syncChanges]
   );
 
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const deployments = await db.deployments.toArray();
+        console.log("%cDeployment Dashboard Started", CONSOLE_STYLES.title);
+        console.log("%c✓ IndexedDB initialized", CONSOLE_STYLES.success);
+        console.log(
+          `%c✓ ${deployments.length} deployments loaded`,
+          CONSOLE_STYLES.success
+        );
+        console.log(
+          "%cYou can open the app in multiple browsers using:",
+          CONSOLE_STYLES.info
+        );
+        console.log(`%c${window.location.href}`, CONSOLE_STYLES.url);
+      } catch (error) {
+        console.error("Failed to initialize:", error);
+      }
+    };
+
+    init();
+  }, []);
+
+  const handleExport = async () => {
+    const deployments = await db.deployments.toArray();
+
+    // Get all related data for each deployment
+    const fullData = await Promise.all(
+      deployments.map(async (deployment) => {
+        const [steps, prerequisites, info] = await Promise.all([
+          db.steps.where("deploymentId").equals(deployment.id).toArray(),
+          db.prerequisites
+            .where("deploymentId")
+            .equals(deployment.id)
+            .toArray(),
+          db.info.where("deploymentId").equals(deployment.id).toArray(),
+        ]);
+
+        return {
+          deployment,
+          steps,
+          prerequisites,
+          info,
+        };
+      })
+    );
+
+    const data = JSON.stringify(fullData, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    saveAs(blob, "deployments-export.json");
+  };
+
+  const handleImport = async () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const importedData = JSON.parse(event.target?.result as string);
+
+          // Import each deployment and its related data
+          for (const item of importedData) {
+            await db.transaction(
+              "rw",
+              db.deployments,
+              db.steps,
+              db.prerequisites,
+              db.info,
+              async () => {
+                await db.deployments.put(item.deployment);
+                await db.steps.bulkPut(item.steps);
+                await db.prerequisites.bulkPut(item.prerequisites);
+                await db.info.bulkPut(item.info);
+              }
+            );
+          }
+
+          loadDeployments();
+          enqueueSnackbar("Deployments imported successfully", {
+            variant: "success",
+          });
+
+          // Refresh the page after successful import
+          window.location.reload();
+        } catch (error) {
+          console.error("Import error:", error);
+          enqueueSnackbar("Invalid import file", { variant: "error" });
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    input.click();
+  };
+
   if (!id) {
     return (
       <>
@@ -897,12 +969,15 @@ const Index = () => {
               {/* Left side: Existing Deployments */}
               <Box
                 sx={{
-                  background: "rgba(23, 25, 35, 0.9)", // Darker, more theme-fitting background
+                  background: "rgba(23, 25, 35, 0.9)",
                   backdropFilter: "blur(10px)",
                   borderRadius: "16px",
                   p: 4,
                   boxShadow: "0 4px 30px rgba(0, 0, 0, 0.3)",
                   border: "1px solid rgba(255, 255, 255, 0.1)",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
                 }}
               >
                 <Typography
@@ -922,7 +997,7 @@ const Index = () => {
                     display: "flex",
                     flexDirection: "column",
                     gap: 2,
-                    maxHeight: "400px",
+                    maxHeight: "500px",
                     overflowY: "auto",
                     pr: 2,
                     "&::-webkit-scrollbar": {
@@ -1081,28 +1156,30 @@ const Index = () => {
                   >
                     <AddIcon /> New Deployment
                   </Typography>
-                  <MuiButton
-                    variant="contained"
-                    size="large"
-                    onClick={handleNewDeployment}
-                    sx={{
-                      width: "100%",
-                      py: 3,
-                      background:
-                        "linear-gradient(45deg, #4f46e5 30%, #2563eb 90%)",
-                      color: "white",
-                      boxShadow: "0 0 20px rgba(79, 70, 229, 0.5)",
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 0 30px rgba(79, 70, 229, 0.8)",
+                  <div className="flex justify-between items-center mb-4">
+                    <MuiButton
+                      variant="contained"
+                      size="large"
+                      onClick={handleNewDeployment}
+                      sx={{
+                        width: "100%",
+                        py: 3,
                         background:
-                          "linear-gradient(45deg, #4338ca 30%, #1d4ed8 90%)",
-                      },
-                      transition: "all 0.2s ease",
-                    }}
-                  >
-                    Create New Deployment
-                  </MuiButton>
+                          "linear-gradient(45deg, #4f46e5 30%, #2563eb 90%)",
+                        color: "white",
+                        boxShadow: "0 0 20px rgba(79, 70, 229, 0.5)",
+                        "&:hover": {
+                          transform: "translateY(-2px)",
+                          boxShadow: "0 0 30px rgba(79, 70, 229, 0.8)",
+                          background:
+                            "linear-gradient(45deg, #4338ca 30%, #1d4ed8 90%)",
+                        },
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      Create New Deployment
+                    </MuiButton>
+                  </div>
                 </Box>
 
                 <Box
@@ -1159,6 +1236,82 @@ const Index = () => {
                       Load
                     </MuiButton>
                   </Box>
+                </Box>
+
+                <Box
+                  sx={{
+                    background: "#0a0a0f",
+                    backdropFilter: "none",
+                    borderRadius: "16px",
+                    p: 4,
+                    boxShadow: "0 4px 30px rgba(0, 0, 0, 0.3)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                  }}
+                >
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      color: "rgba(255, 255, 255, 0.9)",
+                      mb: 3,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
+                    <Import className="h-5 w-5" /> Import/Export
+                  </Typography>
+                  <div className="flex gap-4">
+                    <MuiButton
+                      variant="contained"
+                      onClick={handleImport}
+                      startIcon={<Import />}
+                      fullWidth
+                      sx={{
+                        background:
+                          "linear-gradient(45deg, #8b5cf6 30%, #6366f1 90%)",
+                        color: "white",
+                        boxShadow: "0 0 20px rgba(139, 92, 246, 0.3)",
+                        borderRadius: "8px",
+                        textTransform: "none",
+                        fontWeight: 500,
+                        py: 1.5,
+                        "&:hover": {
+                          background:
+                            "linear-gradient(45deg, #7c3aed 30%, #4f46e5 90%)",
+                          boxShadow: "0 0 30px rgba(139, 92, 246, 0.5)",
+                          transform: "translateY(-2px)",
+                        },
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      Import Deployments
+                    </MuiButton>
+                    <MuiButton
+                      variant="contained"
+                      onClick={handleExport}
+                      startIcon={<Download />}
+                      fullWidth
+                      sx={{
+                        background:
+                          "linear-gradient(45deg, #0ea5e9 30%, #2563eb 90%)",
+                        color: "white",
+                        boxShadow: "0 0 20px rgba(14, 165, 233, 0.3)",
+                        borderRadius: "8px",
+                        textTransform: "none",
+                        fontWeight: 500,
+                        py: 1.5,
+                        "&:hover": {
+                          background:
+                            "linear-gradient(45deg, #0284c7 30%, #1d4ed8 90%)",
+                          boxShadow: "0 0 30px rgba(14, 165, 233, 0.5)",
+                          transform: "translateY(-2px)",
+                        },
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      Export Deployments
+                    </MuiButton>
+                  </div>
                 </Box>
               </Box>
             </Box>

@@ -44,7 +44,7 @@ wss.on('connection', (ws) => {
         });
       }
     } catch (error) {
-      console.error('Failed to process message:', error);
+      // console.error('Failed to process message:', error);
     }
   });
 });
@@ -74,4 +74,11 @@ app.use((req, res, next) => {
 
 server.listen(port, () => {
   console.log(`Combined server running on port ${port}`);
+  console.log(`Use the following URLs to access the app:`);
+  console.log(`   http://localhost:${port}`);
+  // Log the IP address of the server
+  const ipaddress = server.address();
+  const actualipaddress = typeof ipaddress === 'string' ? ipaddress : ipaddress?.address;
+  console.log(`   http://${actualipaddress}:${port}`);
+  console.log(`Awaiting connections...`);
 }); 

@@ -1,59 +1,82 @@
-# Deployment Steps Manager
+# Deployment Dashboard
 
-A tool to manage and track deployment steps across teams. All-in-one executable with embedded database.
+A real-time collaborative deployment tracking application that helps teams manage and monitor their deployment processes.
 
 ## Features
 
-- Real-time collaboration
-- Step-by-step deployment tracking
-- Prerequisites management
-- Device-based authentication
-- Offline-first with sync capabilities
-- Self-contained - no external dependencies
+- 🔄 **Real-time Collaboration**: Multiple users can work on the same deployment simultaneously
+- 👥 **Presence Indicators**: See who's currently viewing or editing a deployment
+- 📋 **Structured Deployment Steps**: Organize deployments with prerequisites and execution steps
+- 🏷️ **Categorization**: Categorize deployments (Infrastructure, Software, Testing, etc.)
+- 📊 **Status Tracking**: Track the progress of each deployment step
+- 💾 **Offline Support**: Works offline with local data persistence
+- 📤 **Import/Export**: Share deployments between teams using JSON export/import
+- 🎨 **Modern UI**: Clean, responsive interface with Material-UI components
 
-## Installation
+## Getting Started
 
-1. Download the latest release
-2. Run the executable
-3. Access the app at http://localhost:5984
+### Prerequisites
 
-The app will create a `data` folder in the same directory as the executable to store all information.
+- Node.js 18 or higher
+- npm or yarn
 
-## Development Setup
+### Installation
 
-1. Clone and install:
+1. Clone the repository:
 
 ```bash
-git clone <repository-url>
-cd deployment-steps-manager
+git clone https://github.com/yourusername/deployment-dashboard.git
+cd deployment-dashboard
+```
+
+2. Install dependencies:
+
+```bash
 npm install
 ```
 
-2. Start development server:
+3. Start the development server:
 
 ```bash
 npm run dev
 ```
 
-## Building
-
-Build the standalone executable:
+4. Build for production:
 
 ```bash
-npm run pkg:build
+npm run pkg:full
 ```
 
-The executable will be created in the `executables` directory.
+This will create an executable named `EasyDeploy.exe` that bundles both the frontend and backend.
 
-## Data Management
+### Usage
 
-- Data is stored in the `data` directory next to the executable
-- Automatic backups are created daily in `data/backups`
-- To restore from backup, stop the app, replace `data` with a backup, and restart
+1. Launch the application:
 
-## Notes
+```bash
+npm start
+# or use the executable
+./EasyDeploy.exe
+```
 
-- First device to connect becomes the admin
-- Data is synced in real-time between all connected clients
-- Works offline with automatic sync when connection is restored
-- Each device gets a unique identifier for change tracking
+2. Create a new deployment or load an existing one
+3. Add prerequisites and deployment steps
+4. Share the deployment ID with your team
+5. Collaborate in real-time
+
+## Data Import/Export
+
+- Export deployments to JSON using the "Export" button
+- Import deployments from JSON using the "Import" button
+- All related data (steps, prerequisites, info) is included in the export
+
+## Development
+
+- Frontend: React + TypeScript + Material-UI
+- Backend: Node.js + Express + WebSocket
+- Database: IndexedDB (client-side storage)
+- Build: Vite + pkg (for executable creation)
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
